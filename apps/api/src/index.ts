@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import express from 'express'
+import cors from 'cors'
 import authRouter from './routes/auth'
 import webhooksRouter from './routes/webhooks'
 import sseRouter from './routes/sse'
@@ -8,6 +9,11 @@ import { sseManager } from './lib/sseManager'
 
 const app = express()
 const PORT = process.env.PORT || 3001
+
+app.use(cors({
+  origin: 'http://localhost:3000',
+  credentials: true
+}))
 
 app.use(express.json())
 
@@ -19,6 +25,7 @@ app.use('/auth', authRouter)
 app.use('/hooks',webhooksRouter)
 app.use('/sse',sseRouter)
 app.use('/requests',requestsRouter)
+
 app.post('/internal/explanation-ready',express.json(),(req,res)=>{
   const {requestId, userId, content}=req.body
   sseManager.send(userId,{
@@ -27,6 +34,7 @@ app.post('/internal/explanation-ready',express.json(),(req,res)=>{
   })
   res.json({ok:true})
 })
+
 app.listen(PORT, () => {
   console.log(`API server running on port ${PORT}`)
 })

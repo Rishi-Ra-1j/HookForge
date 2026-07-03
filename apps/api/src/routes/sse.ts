@@ -1,30 +1,38 @@
-import { Response } from 'express'
-import { authenticate, AuthRequest } from '../middleware/authenticate'
+import { Response, Request } from 'express'
 import { sseManager } from '../lib/sseManager'
 import { Router } from 'express'
+import { verifyAccessToken } from '../lib/jwt'
 
 const router = Router()
 
-// GET /sse
-router.get('/', authenticate, (req: AuthRequest, res: Response) => {
-  const userId = req.userId!
+router.get('/', (req: Request, res: Response) => {
+  const token = req.query.token as string
 
-  // Step 1 — set SSE headers
-  res.setHeader('Content-Type', 'text/event-stream')
-  res.setHeader('Cache-Control', 'no-cache')
-  res.setHeader('Connection', 'keep-alive')
-  res.flushHeaders()
+  if (!token) {
+    res.status(401).json({ error: 'No token provided' })
+    return
+  }
 
-  // Step 2 — register this connection
-  sseManager.addConnection(userId, res)
+  try {
+    const payload = verifyAccessToken(token)
+    const userId = payload.userId
 
-  // Step 3 — send initial ping so browser knows connection is alive
-  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`)
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.flushHeaders()
 
-  // Step 4 — clean up when browser disconnects
-  req.on('close', () => {
-    sseManager.removeConnection(userId)
-  })
+    sseManager.addConnection(userId, res)
+
+    res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`)
+
+    req.on('close', () => {
+      sseManager.removeConnection(userId)
+    })
+
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid token' })
+  }
 })
 
 export default router

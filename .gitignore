@@ -1,0 +1,21 @@
+
+.env
+.env.local
+.env.production
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.next/
+build/
+
+# Prisma generated
+generated/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store

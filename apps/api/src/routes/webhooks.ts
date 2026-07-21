@@ -1,14 +1,30 @@
 import { Router, Request, Response } from 'express'
 import { prisma } from '@hookforge/db'
 import { sseManager } from '../lib/sseManager'
-import { explanationQueue,jobOptions} from '@hookforge/queue'
+import { Queue } from 'bullmq'
+
 const router = Router()
+
+// Create queue with explicit connection from environment
+const explanationQueue = new Queue('explanations', {
+  connection: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379'),
+  }
+})
+
+const jobOptions = {
+  attempts: 3,
+  backoff: {
+    type: 'exponential' as const,
+    delay: 2000,
+  }
+}
 
 // POST /hooks/:slug
 router.post('/:slug', async (req: Request, res: Response) => {
-  const { slug } = req.params as {slug : string}
+  const { slug } = req.params as { slug: string }
 
-  // Step 1 — find endpoint by slug
   const endpoint = await prisma.endpoint.findUnique({
     where: { slug }
   })
@@ -18,7 +34,6 @@ router.post('/:slug', async (req: Request, res: Response) => {
     return
   }
 
-  // Step 2 — save the request
   const captured = await prisma.request.create({
     data: {
       endpointId: endpoint.id,
@@ -30,7 +45,6 @@ router.post('/:slug', async (req: Request, res: Response) => {
     }
   })
 
-  // Step 3 — create pending explanation
   await prisma.explanation.create({
     data: {
       requestId: captured.id,
@@ -38,10 +52,8 @@ router.post('/:slug', async (req: Request, res: Response) => {
     }
   })
 
-  // Step 4 — return 200 immediately
   res.status(200).json({ received: true })
 
-  // Step 5 — push SSE event to dashboard
   sseManager.send(endpoint.userId, {
     type: 'new_request',
     payload: {
@@ -52,12 +64,11 @@ router.post('/:slug', async (req: Request, res: Response) => {
     }
   })
 
-  // Step 5 - Enqueue AI job
-  await explanationQueue.add('explain',{
-    requestId : captured.id,
-    userId : endpoint.userId,
-    body : captured.rawBody || '',
-  },jobOptions)
+  await explanationQueue.add('explain', {
+    requestId: captured.id,
+    userId: endpoint.userId,
+    body: captured.rawBody || '',
+  }, jobOptions)
 })
 
 export default router

@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: wingardium_laviosa
       POSTGRES_DB: hookforge
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -35,8 +35,12 @@ services:
       - "3001:3001"
     environment:
       DATABASE_URL: postgresql://hookforgeuser:wingardium_laviosa@postgres:5432/hookforge
-      JWT_ACCESS_SECRET: hookforge_access_secret_key
-      JWT_REFRESH_SECRET: hookforge_refresh_secret_key
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-hookforge_access_secret_key}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-hookforge_refresh_secret_key}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-dev_internal_secret}
+      PUBLIC_API_URL: http://localhost:3001
+      CORS_ORIGIN: http://localhost:3000
+      ALLOW_PRIVATE_REPLAY: "true"
       PORT: 3001
       NODE_ENV: production
       REDIS_HOST: redis
@@ -57,6 +61,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       API_PORT: 3001
+      API_INTERNAL_URL: http://api:3001
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-dev_internal_secret}
       NODE_ENV: production
     depends_on:
       postgres:

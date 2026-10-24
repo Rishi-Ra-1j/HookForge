@@ -7,27 +7,24 @@ import { authenticate, AuthRequest } from '../middleware/authenticate'
 import { verifyRefreshToken } from '../lib/jwt'
 const router = Router()
 
-// POST /auth/register
+const publicBase = () => (process.env.PUBLIC_API_URL || 'http://localhost:3001').replace(/\/$/, '')
+
 router.post('/register', async (req: Request, res: Response) => {
   const { email, password } = req.body
 
-  // Step 1 — validate input
   if (!email || !password) {
     res.status(400).json({ error: 'Email and password are required' })
     return
   }
 
-  // Step 2 — check if email already exists
   const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) {
     res.status(400).json({ error: 'Email already in use' })
     return
   }
 
-  // Step 3 — hash password
   const hashedPassword = await bcrypt.hash(password, 10)
 
-  // Step 4 — create user
   const user = await prisma.user.create({
     data: {
       email,
@@ -35,7 +32,6 @@ router.post('/register', async (req: Request, res: Response) => {
     }
   })
 
-  // Step 5 — generate slug and create endpoint
   const slug = nanoid(8)
   await prisma.endpoint.create({
     data: {
@@ -44,54 +40,45 @@ router.post('/register', async (req: Request, res: Response) => {
     }
   })
 
-  // Step 6 — generate tokens
   const accessToken = generateAccessToken(user.id)
   const refreshToken = generateRefreshToken(user.id)
 
-  // Step 7 — return response
   res.status(201).json({
     accessToken,
     refreshToken,
-    webhookUrl: `https://hookforge.com/hooks/${slug}`,
+    webhookUrl: `${publicBase()}/hooks/${slug}`,
     user: {
       id: user.id,
       email: user.email,
     }
   })
 })
-// POST /auth/login
 router.post('/login', async (req: Request, res: Response) => {
   const { email, password } = req.body
 
-  // Step 1 — validate input
   if (!email || !password) {
     res.status(400).json({ error: 'Email and password are required' })
     return
   }
 
-  // Step 2 — find user by email
   const user = await prisma.user.findUnique({ where: { email } })
   if (!user) {
     res.status(401).json({ error: 'Invalid credentials' })
     return
   }
 
-  // Step 3 — verify password
   const validPassword = await bcrypt.compare(password, user.password)
   if (!validPassword) {
     res.status(401).json({ error: 'Invalid credentials' })
     return
   }
 
-  // Step 4 — generate tokens
   const accessToken = generateAccessToken(user.id)
   const refreshToken = generateRefreshToken(user.id)
 
-  // Step 5 — return tokens
   res.json({ accessToken, refreshToken })
 })
 
-// POST /auth/refresh
 router.post('/refresh', async (req: Request, res: Response) => {
   const { refreshToken } = req.body
 
@@ -109,7 +96,6 @@ router.post('/refresh', async (req: Request, res: Response) => {
   }
 })
 
-// GET /me
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   const user = await prisma.user.findUnique({
     where: { id: req.userId },
@@ -124,7 +110,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   res.json({
     id: user.id,
     email: user.email,
-    webhookUrl: `https://hookforge.com/hooks/${user.endpoint?.slug}`
+    webhookUrl: `${publicBase()}/hooks/${user.endpoint?.slug}`
   })
 })
 

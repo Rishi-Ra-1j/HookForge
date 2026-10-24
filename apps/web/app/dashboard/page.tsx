@@ -48,7 +48,7 @@ export default function DashboardPage() {
     // Open SSE connection
     const token = getAccessToken()
     const es = new EventSource(
-      `http://localhost:3001/sse?token=${token}`
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/sse?token=${token}`
     )
 
     es.onmessage = (event) => {

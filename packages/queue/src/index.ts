@@ -1,10 +1,26 @@
 import 'dotenv/config'
 import { Queue, Worker, Job } from 'bullmq'
 
-const connection = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
+// Supports a single REDIS_URL (hosted Redis) or REDIS_HOST/REDIS_PORT (local compose)
+function buildConnection() {
+  const url = process.env.REDIS_URL
+  if (url) {
+    const u = new URL(url)
+    return {
+      host: u.hostname,
+      port: Number(u.port || 6379),
+      username: u.username ? decodeURIComponent(u.username) : undefined,
+      password: u.password ? decodeURIComponent(u.password) : undefined,
+      ...(u.protocol === 'rediss:' ? { tls: {} } : {}),
+    }
+  }
+  return {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379'),
+  }
 }
+
+export const connection = buildConnection()
 
 // The queue — API adds jobs here
 export const explanationQueue = new Queue('explanations', { connection })

@@ -1,25 +1,9 @@
 import { Router, Request, Response } from 'express'
 import { prisma } from '@hookforge/db'
 import { sseManager } from '../lib/sseManager'
-import { Queue } from 'bullmq'
+import { explanationQueue, jobOptions } from '@hookforge/queue'
 
 const router = Router()
-
-// Create queue with explicit connection from environment
-const explanationQueue = new Queue('explanations', {
-  connection: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379'),
-  }
-})
-
-const jobOptions = {
-  attempts: 3,
-  backoff: {
-    type: 'exponential' as const,
-    delay: 2000,
-  }
-}
 
 // POST /hooks/:slug
 router.post('/:slug', async (req: Request, res: Response) => {
@@ -40,7 +24,8 @@ router.post('/:slug', async (req: Request, res: Response) => {
       method: req.method,
       headers: req.headers as object,
       body: req.body || null,
-      rawBody: req.body ? JSON.stringify(req.body) : null,
+      // exact bytes as received (needed for signature verification); fall back to re-serialised body
+      rawBody: (req as any).rawBody ?? (req.body ? JSON.stringify(req.body) : null),
       sourceIp: req.ip || 'unknown',
     }
   })
@@ -64,11 +49,19 @@ router.post('/:slug', async (req: Request, res: Response) => {
     }
   })
 
-  await explanationQueue.add('explain', {
-    requestId: captured.id,
-    userId: endpoint.userId,
-    body: captured.rawBody || '',
-  }, jobOptions)
+  try {
+    await explanationQueue.add('explain', {
+      requestId: captured.id,
+      userId: endpoint.userId,
+      body: captured.rawBody || '',
+    }, jobOptions)
+  } catch (err) {
+    console.error('Failed to enqueue explanation job:', err)
+    await prisma.explanation.update({
+      where: { requestId: captured.id },
+      data: { status: 'failed' },
+    }).catch(() => {})
+  }
 })
 
 export default router

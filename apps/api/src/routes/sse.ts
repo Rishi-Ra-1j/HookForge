@@ -20,14 +20,19 @@ router.get('/', (req: Request, res: Response) => {
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
     res.flushHeaders()
 
     sseManager.addConnection(userId, res)
 
     res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`)
 
+    // Comment line every 25s so proxies don't drop the idle connection
+    const heartbeat = setInterval(() => res.write(': ping\n\n'), 25_000)
+
     req.on('close', () => {
-      sseManager.removeConnection(userId)
+      clearInterval(heartbeat)
+      sseManager.removeConnection(userId, res)
     })
 
   } catch (err) {

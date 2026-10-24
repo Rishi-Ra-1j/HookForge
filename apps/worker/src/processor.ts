@@ -15,7 +15,7 @@ export async function processExplanationJob(job: Job<ExplanationJobData>) {
     if (!request) throw new Error(`Request ${requestId} not found`)
 
     // Step 2 — call Gemini API
-    const explanation = await callGemini(request.rawBody || JSON.stringify(request.body))
+    const explanation = await callGemini((request.rawBody || JSON.stringify(request.body)).slice(0, 8000))
 
     // Step 3 — save explanation to DB
     await prisma.explanation.update({
@@ -26,16 +26,25 @@ export async function processExplanationJob(job: Job<ExplanationJobData>) {
       }
     })
 
-    // Step 4 — notify API to push SSE event
-    await fetch(`http://localhost:${process.env.API_PORT || 3001}/internal/explanation-ready`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requestId,
-        userId: request.endpoint.userId,
-        content: explanation
+    // Step 4 — notify API to push SSE event (best-effort: must never fail the job)
+    try {
+      const base = process.env.API_INTERNAL_URL
+        || `http://localhost:${process.env.PORT || process.env.API_PORT || 3001}`
+      await fetch(`${base}/internal/explanation-ready`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-secret': process.env.INTERNAL_SECRET ?? '',
+        },
+        body: JSON.stringify({
+          requestId,
+          userId: request.endpoint.userId,
+          content: explanation
+        })
       })
-    })
+    } catch (notifyErr) {
+      console.error('SSE notify failed (explanation was saved):', notifyErr)
+    }
 
   } catch (err) {
     await prisma.explanation.update({

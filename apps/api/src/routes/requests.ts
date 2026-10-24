@@ -1,6 +1,7 @@
 import { Router, Response } from 'express'
 import { prisma } from '@hookforge/db'
 import { authenticate, AuthRequest } from '../middleware/authenticate'
+import { assertSafeTarget } from '../lib/ssrf'
 
 const router = Router()
 
@@ -119,17 +120,28 @@ router.post('/:id/replay', async (req: AuthRequest, res: Response) => {
     return
   }
 
-  // Step 3 — replay it
+  // Step 3 — validate the target (blocks private/internal addresses unless ALLOW_PRIVATE_REPLAY=true)
+  let target: URL
+  try {
+    target = await assertSafeTarget(targetUrl, process.env.ALLOW_PRIVATE_REPLAY === 'true')
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid target URL' })
+    return
+  }
+
+  // Step 4 — replay it
   const startTime = Date.now()
 
   try {
-    const response = await fetch(targetUrl, {
+    const response = await fetch(target, {
       method: stored.method,
       headers: {
         'Content-Type': 'application/json',
         'X-Replayed-By': 'HookForge',
       },
       body: stored.rawBody || undefined,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10_000),
     })
 
     const latency = Date.now() - startTime
@@ -138,7 +150,7 @@ router.post('/:id/replay', async (req: AuthRequest, res: Response) => {
     res.json({
       status: response.status,
       latency,
-      body: responseBody,
+      body: responseBody.slice(0, 10000),
     })
 
   } catch (err) {

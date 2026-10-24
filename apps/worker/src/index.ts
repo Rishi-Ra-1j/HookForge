@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { Worker } from '@hookforge/queue'
+import { Worker, connection } from '@hookforge/queue'
 import { processExplanationJob } from './processor'
 
 console.log('Worker starting...')
@@ -7,12 +7,7 @@ console.log('Worker starting...')
 const worker = new Worker(
   'explanations',
   processExplanationJob,
-  {
-    connection: {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-    }
-  }
+  { connection }
 )
 
 worker.on('completed', (job) => {

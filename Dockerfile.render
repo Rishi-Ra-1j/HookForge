@@ -20,4 +20,4 @@ COPY tsconfig.base.json ./
 
 RUN cd packages/db && npx prisma generate
 
-CMD ["npx", "tsx", "apps/start-combined.ts"]
+CMD ["sh", "-c", "cd packages/db && npx prisma migrate deploy && cd /app && exec npx tsx apps/start-combined.ts"]

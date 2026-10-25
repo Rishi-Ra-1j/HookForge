@@ -14,6 +14,7 @@ RUN npm install
 
 COPY apps/api ./apps/api
 COPY apps/worker ./apps/worker
+COPY apps/start-combined.ts ./apps/start-combined.ts
 COPY packages/db ./packages/db
 COPY packages/queue ./packages/queue
 COPY tsconfig.base.json ./
